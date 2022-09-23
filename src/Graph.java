@@ -1,9 +1,10 @@
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Scanner;
 
 public class Graph {
     private int nodes = 0;
-    private boolean[][] edges;
+    private BitSet[] edges;
     private int[] degrees;
 
     public Graph(Scanner in) {
@@ -14,7 +15,9 @@ public class Graph {
                     throw new IllegalArgumentException("Number of nodes defined multiple times in graph file input!");
                 String[] parts = line.split("\\s+");
                 nodes = Integer.parseInt(parts[2]);
-                edges = new boolean[nodes][nodes];
+                edges = new BitSet[nodes];
+                for (int i = 0; i < nodes; ++i)
+                    edges[i] = new BitSet(nodes);
                 degrees = new int[nodes];
             }
             else if (line.startsWith("e ")) {
@@ -25,9 +28,9 @@ public class Graph {
                 int from = Integer.parseInt(parts[1]) - 1;
                 int to = Integer.parseInt(parts[2]) - 1;
                 // In case edges are listed from both directions
-                if (!edges[from][to]) {
-                    edges[from][to] = true;
-                    edges[to][from] = true;
+                if (!edges[from].get(to)) {
+                    edges[from].set(to);
+                    edges[to].set(from);
                     ++degrees[to];
                     ++degrees[from];
                 }
@@ -58,7 +61,7 @@ public class Graph {
         int offset = oneBasedIndexing ? 1 : 0;
         for (int i = 0; i < nodes.length - 1; ++i)
             for (int j = i + 1; j < nodes.length; ++j)
-                if (!edges[nodes[i]-offset][nodes[j]-offset])
+                if (!edges[nodes[i]-offset].get(nodes[j]-offset))
                     return false;
 
         return true;
