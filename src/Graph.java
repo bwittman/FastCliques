@@ -3,11 +3,11 @@ import java.util.BitSet;
 import java.util.Scanner;
 
 public class Graph {
-    private int nodes = 0;
     private BitSet[] edges;
     private int[] degrees;
 
     public Graph(Scanner in) {
+        int nodes = 0;
         while (in.hasNextLine()) {
             String line = in.nextLine();
             if (line.startsWith("p ")) {
@@ -53,6 +53,23 @@ public class Graph {
         return upperBound;
     }
 
+    public static int[] bitSetToArray(BitSet set) {
+        int[] nodes = new int[set.size()];
+        int index = 0;
+        for (int i = 0; i < nodes.length; ++i) {
+            if (set.get(i)) {
+                nodes[index] = i;
+                ++index;
+            }
+        }
+
+        return nodes;
+    }
+
+    public boolean isClique(BitSet nodes) {
+        return isClique(bitSetToArray(nodes));
+    }
+
     public boolean isClique(int[] nodes) {
         return isClique(nodes, false);
     }
@@ -65,5 +82,35 @@ public class Graph {
                     return false;
 
         return true;
+    }
+
+    /**
+     * Unions two cliques together to make a new clique. This method will return null if the resulting union
+     * is not a clique. Output is undefined if the input cliques are not, in fact, cliques.
+     * @param clique1 First pre-existing clique
+     * @param clique2 Second pre-existing clique
+     * @return New clique made by unioning together nodes in existing cliques or null if the result is not a clique
+     */
+    public BitSet mergeCliques(BitSet clique1, BitSet clique2) {
+        BitSet firstMinusSecond = (BitSet) clique1.clone();
+        firstMinusSecond.andNot(clique2);
+        BitSet secondMinusFirst = (BitSet) clique2.clone();
+        secondMinusFirst.andNot(clique1);
+
+        if (firstMinusSecond.isEmpty() || secondMinusFirst.isEmpty() ||
+                firstMinusSecond.cardinality() == clique1.cardinality() ||
+                secondMinusFirst.cardinality() == clique2.cardinality())
+            return null;
+
+        int[] remainingFirstNodes = bitSetToArray(firstMinusSecond);
+        int[] remainingSecondNodes = bitSetToArray(secondMinusFirst);
+        for (int firstNode : remainingFirstNodes)
+            for (int secondNode : remainingSecondNodes)
+                if (!edges[firstNode].get(secondNode))
+                    return null;
+
+        BitSet union = (BitSet)clique1.clone();
+        union.or(clique2);
+        return union;
     }
 }
