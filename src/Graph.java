@@ -38,6 +38,14 @@ public class Graph {
         }
     }
 
+    public int nodes() {
+        return edges.length;
+    }
+
+    public boolean hasEdge(int from, int to) {
+        return edges[from].get(to);
+    }
+
     public int cliqueUpperBound() {
         int[] degreesCopy = degrees.clone();
         Arrays.sort(degreesCopy);
@@ -54,15 +62,19 @@ public class Graph {
     }
 
     public static int[] bitSetToArray(BitSet set) {
-        int[] nodes = new int[set.size()];
+        int[] nodes = new int[set.cardinality()];
         int index = 0;
-        for (int i = 0; i < nodes.length; ++i) {
-            if (set.get(i)) {
-                nodes[index] = i;
-                ++index;
-            }
-        }
 
+        for (int i = set.nextSetBit(0); i >= 0; i = set.nextSetBit(i+1)) {
+            nodes[index] = i;
+            ++index;
+
+            /* // Unnecessary safety check
+            if (i == Integer.MAX_VALUE) {
+                break; // or (i+1) would overflow
+            }
+            */
+        }
         return nodes;
     }
 
@@ -86,20 +98,18 @@ public class Graph {
 
     /**
      * Unions two cliques together to make a new clique. This method will return null if the resulting union
-     * is not a clique. Output is undefined if the input cliques are not, in fact, cliques.
-     * @param clique1 First pre-existing clique
-     * @param clique2 Second pre-existing clique
+     * is not a clique. Output is undefined if input cliques are not, in fact, cliques.
+     * @param first First pre-existing clique
+     * @param second Second pre-existing clique
      * @return New clique made by unioning together nodes in existing cliques or null if the result is not a clique
      */
-    public BitSet mergeCliques(BitSet clique1, BitSet clique2) {
-        BitSet firstMinusSecond = (BitSet) clique1.clone();
-        firstMinusSecond.andNot(clique2);
-        BitSet secondMinusFirst = (BitSet) clique2.clone();
-        secondMinusFirst.andNot(clique1);
+    public BitSet mergeCliques(BitSet first, BitSet second) {
+        BitSet firstMinusSecond = (BitSet) first.clone();
+        firstMinusSecond.andNot(second);
+        BitSet secondMinusFirst = (BitSet) second.clone();
+        secondMinusFirst.andNot(first);
 
-        if (firstMinusSecond.isEmpty() || secondMinusFirst.isEmpty() ||
-                firstMinusSecond.cardinality() == clique1.cardinality() ||
-                secondMinusFirst.cardinality() == clique2.cardinality())
+        if (firstMinusSecond.isEmpty() || secondMinusFirst.isEmpty())
             return null;
 
         int[] remainingFirstNodes = bitSetToArray(firstMinusSecond);
@@ -109,8 +119,8 @@ public class Graph {
                 if (!edges[firstNode].get(secondNode))
                     return null;
 
-        BitSet union = (BitSet)clique1.clone();
-        union.or(clique2);
+        BitSet union = (BitSet)first.clone();
+        union.or(second);
         return union;
     }
 }
