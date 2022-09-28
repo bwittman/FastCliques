@@ -1,29 +1,141 @@
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 public class Main {
     public static void main(String[] args) throws FileNotFoundException {
         Scanner in = new Scanner(System.in);
-        String name = "data/brock200_1.clq";
-        Graph graph;
+        String name = "data/brock.dat";
+        Map<String, Integer> graphs = new TreeMap<>();
         try (Scanner file = new Scanner(new File(name))) {
-            graph = new Graph(file);
+            while (file.hasNext()) {
+                String graphName = file.next();
+                int bestKnownClique = file.nextInt();
+                graphs.put(graphName, bestKnownClique);
+            }
         }
 
-        System.out.println("Upper bound: " + graph.cliqueUpperBound());
-        // The .clq files use 1-based numbering for nodes and edges but report cliques with 0-based numbering
-        int[] reportedClique = {133, 17, 92, 177, 38, 19, 84, 134, 107, 89, 185, 91, 67, 141, 149, 72, 101, 135, 86, 93, 80};
-        System.out.println("Has clique: " + graph.isClique(reportedClique));
+        System.out.format("%-20s %5s %5s %s%n", "Graph File", "Known", "Found", "Time");
+
+        for (Map.Entry<String, Integer> graphEntry : graphs.entrySet()) {
+            Graph graph;
+            String graphName = graphEntry.getKey();
+            try (Scanner file = new Scanner(new File("data/" + graphName))) {
+                graph = new Graph(file);
+            }
+
+            // System.out.println("Upper bound: " + graph.cliqueUpperBound());
+            // The .clq files use 1-based numbering for nodes and edges but report cliques with 0-based numbering
+            //int[] reportedClique = {133, 17, 92, 177, 38, 19, 84, 134, 107, 89, 185, 91, 67, 141, 149, 72, 101, 135, 86, 93, 80};
+            //System.out.println("Has clique: " + graph.isClique(reportedClique));
 
 
-        // Testing of random clique generation
-        // Issue: There are large numbers of triangular cliques,
-        // so randomly merging them generates a small number of size 6 cliques.
-        // Since the number of size 6 cliques is small relative to the size 3,
-        // even a large number of iterations fails to merge a size 6 with anything else.
-        Set<BitSet> cliques = randomlyFindCliques(graph, 10000000);
+            // Testing of random clique generation
+            // Issue: There are large numbers of triangular cliques,
+            // so randomly merging them generates a small number of size 6 cliques.
+            // Since the number of size 6 cliques is small relative to the size 3,
+            // even a large number of iterations fails to merge a size 6 with anything else.
+            // Set<BitSet> cliques = randomlyFindCliques(graph, 10000000);
+
+            // Try by sorting by degree
+            long start = System.nanoTime();
+            int largest = buildCliquesByDescendingDegree(graph);
+            long end = System.nanoTime();
+            System.out.format("%-20s %5d %5d %.3f seconds%n", graphName, graphEntry.getValue(), largest, (end - start)/1000000000.0);
+        }
     }
+
+
+    /**
+     * Builds cliques by sorting graph by degree.
+     * Hopefully, large-degree nodes will be in the same clique as their neighbors.
+     * @param graph input graph
+     */
+    public static int buildCliquesByDescendingDegree(Graph graph) {
+        Set<BitSet> cliques = new HashSet<>();
+        List<BitSet> listOfCliques = new ArrayList<>(); // List for randomly selecting cliques
+        int[] sortedNodes = graph.getNodesSortedByDegree();
+        int largest = 3;
+        for (int i = 0; i < sortedNodes.length; ++i) {
+            boolean connected = true;
+            BitSet clique = new BitSet(sortedNodes.length);
+            clique.set(sortedNodes[i]);
+            for (int j = i + 1; connected && j < sortedNodes.length; ++j) {
+                for (int k = i; connected && k < j; ++k) {
+                    if (!graph.hasEdge(sortedNodes[k], sortedNodes[j]))
+                        connected = false;
+                }
+                if (connected)
+                    clique.set(sortedNodes[j]);
+            }
+            cliques.add(clique);
+            listOfCliques.add(clique);
+            if (clique.cardinality() > largest)
+                largest = clique.cardinality();
+            //System.out.println("Added clique with size: " + clique.cardinality());
+        }
+
+        if (cliques.size() < 2)
+            return largest;
+
+        // All pairs
+        int initialSize = listOfCliques.size();
+        for (int i = 0; i < initialSize - 1; ++i)
+            for (int j = i + 1; j < initialSize; ++j) {
+                BitSet candidate = graph.mergeCliques(listOfCliques.get(i), listOfCliques.get(j));
+                if (candidate != null && !cliques.contains(candidate)) {
+                    // System.out.println("Found new clique!");
+                    cliques.add(candidate);
+                    listOfCliques.add(candidate);
+                    if (candidate.cardinality() > largest)
+                        largest = candidate.cardinality();
+                }
+            }
+
+        listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
+
+        Random random = new Random();
+        int power = 2;
+        for (int iteration = 1; iteration <= 1000000; ++iteration) {
+
+            int first = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            int second;
+            do {
+                second = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            } while (second == first);
+/*
+
+            int first = random.nextInt(cliques.size());
+            int second;
+            do {
+                second = random.nextInt(cliques.size());
+            } while (second == first);
+
+            */
+            BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
+            if (candidate != null && !cliques.contains(candidate)) {
+                // System.out.println("Found new clique!");
+                cliques.add(candidate);
+                listOfCliques.add(candidate);
+                if (candidate.cardinality() > largest)
+                    largest = candidate.cardinality();
+            }
+
+            if (iteration % 1000 == 0) {
+
+                listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
+                //System.out.format("%10d: %d cliques, largest: %d%n", iteration, cliques.size(), largest);
+            }
+        }
+
+        //System.out.format("%10s: %d cliques, largest: %d%n", "Final", cliques.size(), largest);
+
+        return largest;
+    }
+
+
 
     /**
      * Builds cliques by merging existing cliques. Initially, it creates all cliques with three elements.
@@ -57,13 +169,21 @@ public class Main {
         int largest = 3;
 
         Random random = new Random();
+        int power = 5;
         for (int iteration = 1; iteration <= iterations; ++iteration) {
+            int first = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            int second;
+            do {
+                second = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            } while (second == first);
+
+            /*
             int first = random.nextInt(cliques.size());
             int second;
             do {
                 second = random.nextInt(cliques.size());
             } while (second == first);
-
+             */
             BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
             if (candidate != null && !cliques.contains(candidate)) {
                 // System.out.println("Found new clique!");

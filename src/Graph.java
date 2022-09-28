@@ -1,5 +1,6 @@
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Comparator;
 import java.util.Scanner;
 
 public class Graph {
@@ -94,6 +95,20 @@ public class Graph {
                     return false;
 
         return true;
+    }
+
+    public int[] getNodesSortedByDegree() {
+        Integer[] nodes = new Integer[edges.length];
+        for (int i = 0; i < nodes.length; ++i)
+            nodes[i] = i;
+
+        Arrays.sort(nodes, Comparator.comparingInt(integer -> degrees[integer]));
+
+        int[] sorted = new int[nodes.length];
+        for (int i = 0; i < sorted.length; ++i)
+            sorted[i] = nodes[i];
+
+        return sorted;
     }
 
     /**
