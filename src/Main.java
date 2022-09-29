@@ -1,7 +1,5 @@
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 
 public class Main {
@@ -43,7 +41,7 @@ public class Main {
             long start = System.nanoTime();
             int largest = buildCliquesByDescendingDegree(graph);
             long end = System.nanoTime();
-            System.out.format("%-20s %5d %5d %.3f seconds%n", graphName, graphEntry.getValue(), largest, (end - start)/1000000000.0);
+            System.out.format("%-20s %5d %5d %.3f seconds%n", graphName, graphEntry.getValue(), largest, (end - start) / 1000000000.0);
         }
     }
 
@@ -51,13 +49,16 @@ public class Main {
     /**
      * Builds cliques by sorting graph by degree.
      * Hopefully, large-degree nodes will be in the same clique as their neighbors.
+     *
      * @param graph input graph
      */
     public static int buildCliquesByDescendingDegree(Graph graph) {
         Set<BitSet> cliques = new HashSet<>();
         List<BitSet> listOfCliques = new ArrayList<>(); // List for randomly selecting cliques
-        int[] sortedNodes = graph.getNodesSortedByDegree();
-        int largest = 3;
+        int[][] result = graph.getNodesSortedByDegree();
+        int[] sortedNodes = result[0];
+        int[] lastIndexWithDegree = result[1];
+        int largest = 1;
         for (int i = 0; i < sortedNodes.length; ++i) {
             boolean connected = true;
             BitSet clique = new BitSet(sortedNodes.length);
@@ -72,6 +73,14 @@ public class Main {
             }
             cliques.add(clique);
             listOfCliques.add(clique);
+            /*
+            if (clique.cardinality() > 1) { // Put the singleton clique in as well
+                BitSet singleton = new BitSet(sortedNodes.length);
+                singleton.set(sortedNodes[i]);
+                cliques.add(clique);
+                listOfCliques.add(clique);
+            }
+            */
             if (clique.cardinality() > largest)
                 largest = clique.cardinality();
             //System.out.println("Added clique with size: " + clique.cardinality());
@@ -98,12 +107,16 @@ public class Main {
 
         Random random = new Random();
         int power = 2;
-        for (int iteration = 1; iteration <= 1000000; ++iteration) {
+        final int EDGES = graph.edges();
+        final int ITERATIONS = EDGES;
+        final int NODES = graph.nodes();
+        int window = Math.min(10, cliques.size());
+        for (int iteration = 1; iteration <= ITERATIONS; ++iteration) {
 
-            int first = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            int first = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             int second;
             do {
-                second = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+                second = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             } while (second == first);
 /*
 
@@ -123,10 +136,38 @@ public class Main {
                     largest = candidate.cardinality();
             }
 
-            if (iteration % 1000 == 0) {
-
+            if (iteration % NODES == 0) {
                 listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
                 //System.out.format("%10d: %d cliques, largest: %d%n", iteration, cliques.size(), largest);
+
+                int oldLargest = largest;
+                int oldSize = listOfCliques.size();
+                BitSet singleton = new BitSet();
+
+                for (int i = 0; i < window; ++i) {
+                    boolean found = false;
+                    int lastNode = Math.max(0, lastIndexWithDegree[largest - 1]);
+                    for (int node = NODES - 1; node >= lastNode && !found; --node) {
+                        singleton.clear();
+                        singleton.set(sortedNodes[node]);
+                        candidate = graph.mergeCliques(listOfCliques.get(oldSize - 1 - i), singleton);
+                        if (candidate != null && !cliques.contains(candidate)) {
+                            // System.out.println("Found new clique!");
+                            cliques.add(candidate);
+                            listOfCliques.add(candidate);
+                            if (candidate.cardinality() > largest)
+                                largest = candidate.cardinality();
+                            found = true;
+                        }
+                    }
+                }
+
+                // No larger clique found, grow window
+                if (largest == oldLargest)
+                    window = Math.min(window * 2, Math.min(cliques.size(), NODES));
+                else
+                    window = Math.max(window / 2, Math.min(10, cliques.size()));
+                //System.out.println("Window size: " + window);
             }
         }
 
@@ -136,10 +177,10 @@ public class Main {
     }
 
 
-
     /**
      * Builds cliques by merging existing cliques. Initially, it creates all cliques with three elements.
-     * @param graph input graph
+     *
+     * @param graph      input graph
      * @param iterations number of iterations to run to find cliques
      */
     public static Set<BitSet> randomlyFindCliques(Graph graph, int iterations) {
@@ -149,9 +190,9 @@ public class Main {
         int nodes = graph.nodes();
         for (int i = 0; i < nodes - 1; ++i)
             for (int j = i + 1; j < nodes; ++j) {
-                if (graph.hasEdge(i,j)) {
+                if (graph.hasEdge(i, j)) {
                     for (int k = 0; k < nodes; ++k) {
-                        if (k != i && k != j && graph.hasEdge(i,k) && graph.hasEdge(j,k)) {
+                        if (k != i && k != j && graph.hasEdge(i, k) && graph.hasEdge(j, k)) {
                             BitSet clique = new BitSet(nodes);
                             clique.set(i);
                             clique.set(j);
@@ -171,10 +212,10 @@ public class Main {
         Random random = new Random();
         int power = 5;
         for (int iteration = 1; iteration <= iterations; ++iteration) {
-            int first = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+            int first = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             int second;
             do {
-                second = (int)Math.pow((Math.pow(cliques.size(), power + 1))* random.nextDouble(), 1.0/(power + 1));
+                second = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             } while (second == first);
 
             /*

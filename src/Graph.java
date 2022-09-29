@@ -5,6 +5,7 @@ import java.util.Scanner;
 
 public class Graph {
     private BitSet[] edges;
+    private int totalEdges;
     private int[] degrees;
 
     public Graph(Scanner in) {
@@ -34,6 +35,7 @@ public class Graph {
                     edges[to].set(from);
                     ++degrees[to];
                     ++degrees[from];
+                    ++totalEdges;
                 }
             }
         }
@@ -42,6 +44,8 @@ public class Graph {
     public int nodes() {
         return edges.length;
     }
+
+    public int edges() { return totalEdges; }
 
     public boolean hasEdge(int from, int to) {
         return edges[from].get(to);
@@ -97,7 +101,7 @@ public class Graph {
         return true;
     }
 
-    public int[] getNodesSortedByDegree() {
+    public int[][] getNodesSortedByDegree() {
         Integer[] nodes = new Integer[edges.length];
         for (int i = 0; i < nodes.length; ++i)
             nodes[i] = i;
@@ -108,7 +112,29 @@ public class Graph {
         for (int i = 0; i < sorted.length; ++i)
             sorted[i] = nodes[i];
 
-        return sorted;
+        int[][] result = new int[2][];
+        result[0] = sorted;
+
+        int[] lastIndexWithDegree = new int[nodes.length];
+        int index = 0;
+        while (index < degrees[sorted[0]]) {
+            lastIndexWithDegree[index] = -1;
+            ++index;
+        }
+        for (int i = 0; i < nodes.length; ++i) {
+            while (degrees[sorted[i]] > index) {
+                lastIndexWithDegree[index] = i - 1;
+                ++index;
+            }
+        }
+        while (index < nodes.length) {
+            lastIndexWithDegree[index] = -1;
+            ++index;
+        }
+
+        result[1] = lastIndexWithDegree;
+
+        return result;
     }
 
     /**
