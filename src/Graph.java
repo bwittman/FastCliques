@@ -101,7 +101,44 @@ public class Graph {
         return true;
     }
 
-    public int[][] getNodesSortedByDegree() {
+    public int[] getNodesSortedByDensity() {
+        double[] degrees = new double[this.degrees.length];
+        for (int i = 0; i < degrees.length; ++i)
+            degrees[i] = this.degrees[i];
+        double[] scratch = new double[degrees.length];
+
+        for (int iteration = 0; iteration < Math.log(edges.length); ++iteration) {
+            for (int i = 0; i < edges.length; ++i) {
+                scratch[i] = 0;
+                BitSet currentEdges = edges[i];
+                for (int j = 0; j < edges[i].length(); ++j) {
+                    if (currentEdges.get(j)) {
+                        scratch[i] += degrees[j]/2.0;
+                    }
+                }
+                scratch[i] /= this.degrees[i];
+                scratch[i] += degrees[i];
+            }
+            double[] temp = degrees;
+            degrees = scratch;
+            scratch = temp;
+        }
+
+        Integer[] nodes = new Integer[edges.length];
+        for (int i = 0; i < nodes.length; ++i)
+            nodes[i] = i;
+
+        double[] finalDegrees = degrees;
+        Arrays.sort(nodes, Comparator.comparingDouble(integer -> finalDegrees[integer]));
+
+        int[] sorted = new int[nodes.length];
+        for (int i = 0; i < sorted.length; ++i)
+            sorted[i] = nodes[i];
+
+        return sorted;
+    }
+
+    public int[] getNodesSortedByDegree() {
         Integer[] nodes = new Integer[edges.length];
         for (int i = 0; i < nodes.length; ++i)
             nodes[i] = i;
@@ -112,6 +149,11 @@ public class Graph {
         for (int i = 0; i < sorted.length; ++i)
             sorted[i] = nodes[i];
 
+        return sorted;
+        /*
+        // Hoo-ha that returns the last index in the sorted list with a given degree
+        // It's probably not very useful since, in the hard clique problems, most nodes
+        // have a high degree.
         int[][] result = new int[2][];
         result[0] = sorted;
 
@@ -135,6 +177,23 @@ public class Graph {
         result[1] = lastIndexWithDegree;
 
         return result;
+        */
+    }
+
+    public BitSet addNode(BitSet clique, int node) {
+        if (clique.get(node))
+            return null;
+
+        BitSet nodeEdges = edges[node];
+
+        for (int i = clique.nextSetBit(0); i >= 0; i = clique.nextSetBit(i+1)) {
+            if (!nodeEdges.get(i))
+                return null;
+        }
+
+        BitSet newClique = (BitSet) clique.clone();
+        newClique.set(node);
+        return newClique;
     }
 
     /**
@@ -163,5 +222,64 @@ public class Graph {
         BitSet union = (BitSet)first.clone();
         union.or(second);
         return union;
+    }
+
+    public static double[][] power(double[][] matrix, int power) {
+        if (power < 1)
+            throw new IllegalArgumentException("Invalid power: " + power);
+
+        if (power == 1)
+            return matrix;
+        else if (power % 2 == 0) {
+            double[][] result = power(matrix, power/2);
+            return multiply(result, result);
+        }
+        else {
+            double[][] result = power(matrix, (power - 1)/2);
+            return multiply(matrix,multiply(result, result));
+        }
+    }
+
+    public static double[][] multiply(double[][] a, double[][] b) {
+        double[][] c = new double[a.length][b[0].length];
+        for (int i = 0; i < c.length; ++i)
+            for (int j = 0; j < c[0].length; ++j)
+                for (int k = 0; k < a[0].length; ++k)
+                    c[i][j] += a[i][k] * b[k][j];
+        return c;
+    }
+
+    public int[] getNodesSortedByWalkSize() {
+        final int NODES = edges.length;
+
+        double[][] matrix = new double[NODES][NODES];
+        for (int i = 0; i < NODES - 1; ++i)
+            for (int j = i + 1; j < NODES; ++j)
+                if (edges[i].get(j)) {
+                    matrix[i][j] = 1;
+                    matrix[j][i] = 1;
+                }
+
+        // How big of a walk? Square root of nodes to start with
+         int walkLength = (int)Math.round(Math.log(NODES));
+        //int walkLength = NODES;
+        double[][] walkMatrix = power(matrix, walkLength);
+
+        double[] totalWalks = new double[NODES];
+        for (int i = 0; i < NODES; ++i)
+            for (int j = 0; j < NODES; ++j)
+                totalWalks[i] += walkMatrix[i][j];
+
+        Integer[] nodes = new Integer[NODES];
+        for (int i = 0; i < NODES; ++i)
+            nodes[i] = i;
+
+        Arrays.sort(nodes, Comparator.comparingDouble(integer -> totalWalks[integer]));
+
+        int[] sorted = new int[NODES];
+        for (int i = 0; i < NODES; ++i)
+            sorted[i] = nodes[i];
+
+        return sorted;
     }
 }

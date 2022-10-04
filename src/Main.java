@@ -5,7 +5,10 @@ import java.util.*;
 public class Main {
     public static void main(String[] args) throws FileNotFoundException {
         Scanner in = new Scanner(System.in);
-        String name = "data/brock.dat";
+        //String name = "data/test.dat";
+        //String name = "data/brock.dat";
+        String name = "data/graphs.dat";
+
         Map<String, Integer> graphs = new TreeMap<>();
         try (Scanner file = new Scanner(new File(name))) {
             while (file.hasNext()) {
@@ -39,7 +42,7 @@ public class Main {
 
             // Try by sorting by degree
             long start = System.nanoTime();
-            int largest = buildCliquesByDescendingDegree(graph);
+            int largest = buildCliquesByAscendingDegree(graph);
             long end = System.nanoTime();
             System.out.format("%-20s %5d %5d %.3f seconds%n", graphName, graphEntry.getValue(), largest, (end - start) / 1000000000.0);
         }
@@ -52,12 +55,15 @@ public class Main {
      *
      * @param graph input graph
      */
-    public static int buildCliquesByDescendingDegree(Graph graph) {
+    public static int buildCliquesByAscendingDegree(Graph graph) {
+
+        final int PRIME = findPrime(graph.nodes());
         Set<BitSet> cliques = new HashSet<>();
         List<BitSet> listOfCliques = new ArrayList<>(); // List for randomly selecting cliques
-        int[][] result = graph.getNodesSortedByDegree();
-        int[] sortedNodes = result[0];
-        int[] lastIndexWithDegree = result[1];
+        int[] sortedNodes = graph.getNodesSortedByDegree();
+        int cutoff = 1;
+
+        //int[] sortedNodes = graph.getNodesSortedByWalkSize();
         int largest = 1;
         for (int i = 0; i < sortedNodes.length; ++i) {
             boolean connected = true;
@@ -68,21 +74,21 @@ public class Main {
                     if (!graph.hasEdge(sortedNodes[k], sortedNodes[j]))
                         connected = false;
                 }
-                if (connected)
+                if (connected) {
+                    largest = update((BitSet) clique.clone(), cliques, listOfCliques, cutoff, largest);
                     clique.set(sortedNodes[j]);
+                }
             }
-            cliques.add(clique);
-            listOfCliques.add(clique);
-            /*
+            largest = update(clique, cliques, listOfCliques, cutoff, largest);
+/*
             if (clique.cardinality() > 1) { // Put the singleton clique in as well
                 BitSet singleton = new BitSet(sortedNodes.length);
                 singleton.set(sortedNodes[i]);
                 cliques.add(clique);
                 listOfCliques.add(clique);
             }
-            */
-            if (clique.cardinality() > largest)
-                largest = clique.cardinality();
+*/
+
             //System.out.println("Added clique with size: " + clique.cardinality());
         }
 
@@ -96,84 +102,225 @@ public class Main {
                 BitSet candidate = graph.mergeCliques(listOfCliques.get(i), listOfCliques.get(j));
                 if (candidate != null && !cliques.contains(candidate)) {
                     // System.out.println("Found new clique!");
-                    cliques.add(candidate);
-                    listOfCliques.add(candidate);
-                    if (candidate.cardinality() > largest)
-                        largest = candidate.cardinality();
+                    largest = update(candidate, cliques, listOfCliques, cutoff, largest);
                 }
             }
 
         listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
 
         Random random = new Random();
-        int power = 2;
+        double windowPower = 2;
         final int EDGES = graph.edges();
-        final int ITERATIONS = EDGES;
         final int NODES = graph.nodes();
-        int window = Math.min(10, cliques.size());
-        for (int iteration = 1; iteration <= ITERATIONS; ++iteration) {
+        //int window = Math.min(10, listOfCliques.size());
 
-            int first = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
+        // Build up some cliques
+        int index = listOfCliques.size() - 1;
+        int iterations = 0;
+        while (listOfCliques.size() < EDGES &&  iterations < 1000000) {
+                boolean found = false;
+                BitSet clique = listOfCliques.get(index);
+                //for (int node = NODES - 1; node >= lastNode && !found; --node) {
+                for (int node = 0; node < NODES && !found; ++node) {
+                    BitSet candidate = graph.addNode(clique, sortedNodes[node]);
+                    if (candidate != null && !cliques.contains(candidate)) {
+                        // System.out.println("Found new clique!");
+                        largest = update(candidate, cliques, listOfCliques, cutoff, largest);
+                        found = true;
+                    }
+                }
+
+                --index;
+                if (index == -1)
+                    index = listOfCliques.size() - 1;
+
+                ++iterations;
+            }
+
+        // Build up some more cliques by pairing
+        iterations = 0;
+        while (listOfCliques.size() < 2*EDGES &&  iterations < 1000000) {
+            int first = (int) Math.pow((Math.pow(listOfCliques.size(), 2 + 1)) * random.nextDouble(), 1.0 / (2 + 1));
             int second;
             do {
-                second = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
-            } while (second == first);
-/*
-
-            int first = random.nextInt(cliques.size());
-            int second;
-            do {
-                second = random.nextInt(cliques.size());
+                second = (int) Math.pow((Math.pow(listOfCliques.size(), 2 + 1)) * random.nextDouble(), 1.0 / (2 + 1));
             } while (second == first);
 
-            */
             BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
             if (candidate != null && !cliques.contains(candidate)) {
                 // System.out.println("Found new clique!");
-                cliques.add(candidate);
-                listOfCliques.add(candidate);
-                if (candidate.cardinality() > largest)
-                    largest = candidate.cardinality();
+                largest = update(candidate, cliques, listOfCliques, cutoff, largest);
+                //if (candidate.cardinality() >= largest)
+                    //System.out.println("Found a largest clique!");
             }
+            ++iterations;
+        }
 
-            if (iteration % NODES == 0) {
+        int iterationsAtCurrentLargest = 0;
+        int node = 0;
+        while(iterationsAtCurrentLargest < 100) {
+/*
+            int first = (int) Math.pow((Math.pow(listOfCliques.size(), pairingPower + 1)) * random.nextDouble(), 1.0 / (pairingPower + 1));
+            int second;
+            do {
+                second = (int) Math.pow((Math.pow(listOfCliques.size(), pairingPower + 1)) * random.nextDouble(), 1.0 / (pairingPower + 1));
+            } while (second == first);
+
+
+            int first = random.nextInt(listOfCliques.size());
+            int second;
+            do {
+                second = random.nextInt(listOfCliques.size());
+            } while (second == first);
+
+
+            BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
+            if (candidate != null && !cliques.contains(candidate)) {
+                // System.out.println("Found new clique!");
+                int value = update(candidate, cliques, listOfCliques, cutoff, largest);
+                if (value > largest) {
+                    largest = value;
+                }
+                ++newPairing;
+            }
+            */
+
+
+            //if (iteration % NODES == 0) {
+
+                //long start = System.nanoTime();
                 listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
+                //long end = System.nanoTime();
+                //System.out.format("%nTime spent sorting: %.3f%n", (end - start)/1000000000.0);
+                /*
+                System.out.println("Total cliques: " + cliques.size() + " Window Power: " + windowPower);
+                int currentSize = listOfCliques.get(0).cardinality();
+                int count = 1;
+                for (int i = 1; i < listOfCliques.size(); ++i) {
+                    int size = listOfCliques.get(i).cardinality();
+                    if (size > currentSize) {
+                        System.out.printf("Size: %3d Cliques %d%n", currentSize, count);
+                        currentSize = size;
+                        count = 1;
+                    }
+                    else
+                        ++count;
+                }
+                System.out.printf("Size: %3d Cliques %d%n", currentSize, count);
+                */
+
+                if (listOfCliques.size() > EDGES) {
+                    ++cutoff;
+                    windowPower = 2;
+                    int begin = 0;
+                    int end = listOfCliques.size();
+                    while (begin < end) {
+                        int middle = (begin + end)/2;
+                        int middleSize = listOfCliques.get(middle).cardinality();
+                        if (middleSize <= cutoff) {
+                            begin = middle + 1;
+                        }
+                        else {
+                            end = middle;
+                        }
+                    }
+
+                    // Remove small elements
+                    listOfCliques.subList(0, begin).clear();
+                    //window = Math.min(listOfCliques.size(), window);
+                }
+
+
+
                 //System.out.format("%10d: %d cliques, largest: %d%n", iteration, cliques.size(), largest);
 
-                int oldLargest = largest;
-                int oldSize = listOfCliques.size();
-                BitSet singleton = new BitSet();
 
-                for (int i = 0; i < window; ++i) {
+                //int oldSize = listOfCliques.size();
+
+                int largestBeforeWindow = largest;
+
+
+                for (int i = 0; i < NODES; ++i) {
                     boolean found = false;
-                    int lastNode = Math.max(0, lastIndexWithDegree[largest - 1]);
-                    for (int node = NODES - 1; node >= lastNode && !found; --node) {
-                        singleton.clear();
-                        singleton.set(sortedNodes[node]);
-                        candidate = graph.mergeCliques(listOfCliques.get(oldSize - 1 - i), singleton);
+                    int lastNode = 0;
+                    index = (int) Math.pow((Math.pow(listOfCliques.size(), windowPower + 1)) * random.nextDouble(), 1.0 / (windowPower + 1));
+                    BitSet clique = listOfCliques.get(index);
+
+                    //for (int node = NODES - 1; node >= lastNode && !found; --node) {
+                    for (int repeat = 0; repeat < NODES && !found; ++repeat) {
+                        BitSet candidate = graph.addNode(clique, sortedNodes[node]);
+                        node = (node + PRIME) % NODES;
                         if (candidate != null && !cliques.contains(candidate)) {
                             // System.out.println("Found new clique!");
-                            cliques.add(candidate);
-                            listOfCliques.add(candidate);
-                            if (candidate.cardinality() > largest)
-                                largest = candidate.cardinality();
+                            largest = update(candidate, cliques, listOfCliques, cutoff, largest);
                             found = true;
                         }
                     }
                 }
 
+
                 // No larger clique found, grow window
+                /*
                 if (largest == oldLargest)
-                    window = Math.min(window * 2, Math.min(cliques.size(), NODES));
+                    window = Math.min(window * 2, Math.min(listOfCliques.size(), NODES));
                 else
-                    window = Math.max(window / 2, Math.min(10, cliques.size()));
+                    window = Math.max(window / 2, Math.min(10, listOfCliques.size()));
+
+                 */
+
+                if (largest == largestBeforeWindow) {
+                    windowPower = Math.max(windowPower - .1, 0);
+                }
+                else {
+                    windowPower = Math.min(windowPower + .1, 5);
+                    iterationsAtCurrentLargest = 0;
+                }
+
                 //System.out.println("Window size: " + window);
-            }
+            //}
+
+            ++iterationsAtCurrentLargest;
         }
 
         //System.out.format("%10s: %d cliques, largest: %d%n", "Final", cliques.size(), largest);
 
         return largest;
+    }
+
+    private static int findPrime(int value) {
+        if (value % 2 == 0)
+            --value;
+        else
+            value -= 2;
+
+        while (!isPrime(value)) {
+            value -= 2;
+        }
+
+        return value;
+    }
+
+    private static boolean isPrime(int value) {
+        if (value == 2)
+            return true;
+        else if (value % 2 == 0)
+            return false;
+        for (int i = 3; i*i <= value; i += 2)
+            if (value % i == 0)
+                return false;
+
+        return true;
+    }
+
+    private static int update(BitSet clique, Set<BitSet> cliques, List<BitSet> listOfCliques, int cutoff, int largest) {
+        int size = clique.cardinality();
+        if (size > cutoff) {
+            cliques.add(clique);
+            listOfCliques.add(clique);
+            return Math.max(size, largest);
+        }
+        else
+            return largest;
     }
 
 
@@ -212,17 +359,17 @@ public class Main {
         Random random = new Random();
         int power = 5;
         for (int iteration = 1; iteration <= iterations; ++iteration) {
-            int first = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
+            int first = (int) Math.pow((Math.pow(listOfCliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             int second;
             do {
-                second = (int) Math.pow((Math.pow(cliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
+                second = (int) Math.pow((Math.pow(listOfCliques.size(), power + 1)) * random.nextDouble(), 1.0 / (power + 1));
             } while (second == first);
 
             /*
-            int first = random.nextInt(cliques.size());
+            int first = random.nextInt(listOfCliques.size());
             int second;
             do {
-                second = random.nextInt(cliques.size());
+                second = random.nextInt(listOfCliques.size());
             } while (second == first);
              */
             BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
