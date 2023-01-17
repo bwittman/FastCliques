@@ -1,7 +1,7 @@
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Comparator;
-import java.util.Scanner;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAccumulator;
 
 public class Graph {
     private BitSet[] edges;
@@ -181,8 +181,8 @@ public class Graph {
     }
 
     public BitSet addNode(BitSet clique, int node) {
-        if (clique.get(node))
-            return null;
+        //if (clique.get(node))
+            //return null;
 
         BitSet nodeEdges = edges[node];
 
@@ -222,6 +222,59 @@ public class Graph {
         BitSet union = (BitSet)first.clone();
         union.or(second);
         return union;
+    }
+
+    /**
+     * Combines two cliques together, keeping those elements of the first that are completely connected to the second.
+     * This method will return null unless the resulting clique is larger than both of the input cliques.
+     * Output is undefined if input cliques are not, in fact, cliques.
+     * @param first First pre-existing clique
+     * @param second Second pre-existing clique
+     * @return New clique made by combining together nodes in existing cliques or null if the result is not a larger clique
+     */
+    public BitSet combineCliques(BitSet first, BitSet second) {
+        BitSet firstMinusSecond = (BitSet) first.clone();
+        firstMinusSecond.andNot(second);
+        BitSet secondMinusFirst = (BitSet) second.clone();
+        secondMinusFirst.andNot(first);
+
+        if (firstMinusSecond.isEmpty() || secondMinusFirst.isEmpty())
+            return null;
+
+        int[] remainingFirstNodes = bitSetToArray(firstMinusSecond);
+        int[] remainingSecondNodes = bitSetToArray(secondMinusFirst);
+
+        BitSet intersection = (BitSet) first.clone();
+        intersection.and(second);
+        for (int firstNode : remainingFirstNodes) {
+            boolean keep = true;
+            for (int secondNode : remainingSecondNodes)
+                if (!edges[firstNode].get(secondNode)) {
+                    keep = false;
+                    break;
+                }
+
+            if (keep)
+                intersection.set(firstNode);
+        }
+
+        for (int secondNode : remainingSecondNodes) {
+            boolean keep = true;
+            for (int firstNode : remainingFirstNodes)
+                if (!edges[secondNode].get(firstNode)) {
+                    keep = false;
+                    break;
+                }
+
+            if (keep)
+                intersection.set(secondNode);
+        }
+
+        int newSize = intersection.cardinality();
+        if (newSize > first.cardinality() && newSize > second.cardinality())
+            return intersection;
+        else
+            return null;
     }
 
     public static double[][] power(double[][] matrix, int power) {
@@ -282,4 +335,165 @@ public class Graph {
 
         return sorted;
     }
+
+    public int[] findLargestClique() {
+        final int NODES = edges.length;
+        BitSet currentClique = new BitSet(NODES);
+        BitSet largestClique = new BitSet(NODES);
+        for (int i = 0; i < NODES; ++i) {
+            System.out.println("Starting at: " + i);
+            currentClique.clear();
+            currentClique.set(i);
+            findLargestClique(i, currentClique, largestClique);
+        }
+        return bitSetToArray(largestClique);
+    }
+
+
+    /*
+    public int[] findLargestCliqueStack() {
+        final int NODES = edges.length;
+        BitSet largestClique = new BitSet(NODES);
+        for (int i = 0; i < NODES; ++i) {
+            //System.out.println("Starting at: " + i);
+            BitSet clique = findLargestCliqueStack(i);
+            if (clique.cardinality() > largestClique.cardinality())
+                largestClique = clique;
+        }
+        return bitSetToArray(largestClique);
+    }
+    */
+
+
+    public int[] findLargestCliqueStackThreaded() throws InterruptedException, ExecutionException {
+        ExecutorService executor = Executors.newFixedThreadPool(16);
+
+        LongAccumulator largest = new LongAccumulator(Long::max, 0);
+        final int NODES = edges.length;
+        List<Callable<BitSet>> callableTasks = new ArrayList<>();
+        // Go backwards since high-numbered nodes finish faster
+        for (int i = NODES - 1; i >= 0; --i) {
+            final int finalI = i;
+            callableTasks.add(() -> findLargestCliqueStack(finalI, largest));
+        }
+
+        List<Future<BitSet>> futures = executor.invokeAll(callableTasks);
+        int largestCardinality = 0;
+        BitSet largestClique = null;
+
+        for (Future<BitSet> future : futures) {
+            BitSet clique = future.get();
+            int cardinality = clique.cardinality();
+            if (cardinality > largestCardinality) {
+                largestClique = clique;
+                largestCardinality = cardinality;
+            }
+        }
+
+        executor.shutdown();
+        return bitSetToArray(largestClique);
+    }
+
+
+    private int findLargestClique(int node, BitSet currentClique, BitSet largestClique) {
+        int largestCardinality = largestClique.cardinality();
+        int currentCardinality = currentClique.cardinality();
+
+        if (currentCardinality > largestCardinality) {
+            largestClique.clear();
+            largestClique.or(currentClique);
+            largestCardinality = currentCardinality;
+        }
+
+        // Only look at neighbors with larger indexes than current node
+        // (To avoid repetition)
+        BitSet neighbors = (BitSet) edges[node].clone();
+        BitSet mask = new BitSet(edges.length);
+        mask.flip(0, node + 1);
+        neighbors.andNot(mask);
+        int nextNeighbor = neighbors.nextSetBit(node + 1);
+        int remainingNeighbors = neighbors.cardinality();
+
+        while (nextNeighbor != -1 && remainingNeighbors + currentCardinality > largestCardinality) {
+            BitSet newClique = addNode(currentClique, nextNeighbor);
+            if (newClique != null)
+                largestCardinality = findLargestClique(nextNeighbor, newClique, largestClique);
+
+            nextNeighbor = neighbors.nextSetBit(nextNeighbor + 1);
+            --remainingNeighbors;
+        }
+
+        return largestCardinality;
+    }
+
+    private BitSet findLargestCliqueStack(int node, LongAccumulator largest) {
+        final int NODES = edges.length;
+        BitSet startingClique = new BitSet(NODES);
+        startingClique.set(node);
+
+        BitSet largestClique = (BitSet) startingClique.clone();
+        int largestCardinality = largestClique.cardinality();
+
+        Deque<CliqueData> stack = new ArrayDeque<>();
+
+        BitSet neighbors = (BitSet) edges[node].clone();
+        BitSet mask = new BitSet(edges.length);
+        mask.flip(0, node + 1); // Only look at neighbors after the current node
+        neighbors.andNot(mask);
+
+        CliqueData startingData = new CliqueData();
+        startingData.clique = startingClique;
+        startingData.cardinality = largestCardinality; // Actually the same as startingClique cardinality (1)
+        startingData.neighbors = neighbors;
+        startingData.nextNeighbor = neighbors.nextSetBit(node + 1);
+        startingData.remainingNeighbors = neighbors.cardinality();
+
+        stack.push(startingData);
+
+        while (!stack.isEmpty()) {
+            CliqueData currentData = stack.peek();
+            if (currentData.nextNeighbor != -1 && currentData.remainingNeighbors + currentData.cardinality > largest.get()) {
+                int neighbor = currentData.nextNeighbor;
+                currentData.nextNeighbor = currentData.neighbors.nextSetBit(neighbor + 1);
+                --currentData.remainingNeighbors;
+                BitSet newClique = addNode(currentData.clique, neighbor);
+                if (newClique != null) {
+                    neighbors = (BitSet) edges[neighbor].clone();
+                    mask = new BitSet(edges.length);
+                    mask.flip(0, neighbor + 1);
+                    neighbors.andNot(mask);
+
+                    CliqueData newData = new CliqueData();
+                    newData.clique = newClique;
+                    newData.cardinality = currentData.cardinality + 1;
+                    newData.neighbors = neighbors;
+                    newData.nextNeighbor = neighbors.nextSetBit(neighbor + 1);
+                    newData.remainingNeighbors = neighbors.cardinality();
+
+                    stack.push (newData);
+
+                    if (newData.cardinality > largestCardinality) {
+                        largestClique.clear();
+                        largestClique.or(newClique);
+                        largestCardinality = newData.cardinality;
+                        largest.accumulate(largestCardinality);
+                    }
+                }
+            }
+            else
+                stack.pop();
+        }
+
+        System.out.println("[Finished starting at node " + node  + " Best: " + largestCardinality + "]");
+        return largestClique;
+    }
+
+    private static class CliqueData {
+        public BitSet clique;
+        public int cardinality;
+        public int nextNeighbor;
+        public BitSet neighbors;
+        public int remainingNeighbors;
+    }
+
 }

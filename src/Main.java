@@ -99,7 +99,8 @@ public class Main {
         int initialSize = listOfCliques.size();
         for (int i = 0; i < initialSize - 1; ++i)
             for (int j = i + 1; j < initialSize; ++j) {
-                BitSet candidate = graph.mergeCliques(listOfCliques.get(i), listOfCliques.get(j));
+                //BitSet candidate = graph.mergeCliques(listOfCliques.get(i), listOfCliques.get(j));
+                BitSet candidate = graph.combineCliques(listOfCliques.get(i), listOfCliques.get(j));
                 if (candidate != null && !cliques.contains(candidate)) {
                     // System.out.println("Found new clique!");
                     largest = update(candidate, cliques, listOfCliques, cutoff, largest);
@@ -117,6 +118,8 @@ public class Main {
         // Build up some cliques
         int index = listOfCliques.size() - 1;
         int iterations = 0;
+
+        /*
         while (listOfCliques.size() < EDGES &&  iterations < 1000000) {
                 boolean found = false;
                 BitSet clique = listOfCliques.get(index);
@@ -146,7 +149,8 @@ public class Main {
                 second = (int) Math.pow((Math.pow(listOfCliques.size(), 2 + 1)) * random.nextDouble(), 1.0 / (2 + 1));
             } while (second == first);
 
-            BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
+            //BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
+            BitSet candidate = graph.combineCliques(listOfCliques.get(first), listOfCliques.get(second));
             if (candidate != null && !cliques.contains(candidate)) {
                 // System.out.println("Found new clique!");
                 largest = update(candidate, cliques, listOfCliques, cutoff, largest);
@@ -155,38 +159,32 @@ public class Main {
             }
             ++iterations;
         }
-
+*/
         int iterationsAtCurrentLargest = 0;
         int node = 0;
         while(iterationsAtCurrentLargest < 100) {
-/*
-            int first = (int) Math.pow((Math.pow(listOfCliques.size(), pairingPower + 1)) * random.nextDouble(), 1.0 / (pairingPower + 1));
+
+            int first = (int) Math.pow((Math.pow(listOfCliques.size(), 2 + 1)) * random.nextDouble(), 1.0 / (2 + 1));
             int second;
             do {
-                second = (int) Math.pow((Math.pow(listOfCliques.size(), pairingPower + 1)) * random.nextDouble(), 1.0 / (pairingPower + 1));
+                second = (int) Math.pow((Math.pow(listOfCliques.size(), 2 + 1)) * random.nextDouble(), 1.0 / (2 + 1));
             } while (second == first);
 
 
-            int first = random.nextInt(listOfCliques.size());
-            int second;
-            do {
-                second = random.nextInt(listOfCliques.size());
-            } while (second == first);
 
-
-            BitSet candidate = graph.mergeCliques(listOfCliques.get(first), listOfCliques.get(second));
+            BitSet candidate = graph.combineCliques(listOfCliques.get(first), listOfCliques.get(second));
             if (candidate != null && !cliques.contains(candidate)) {
                 // System.out.println("Found new clique!");
                 int value = update(candidate, cliques, listOfCliques, cutoff, largest);
                 if (value > largest) {
                     largest = value;
+                    iterationsAtCurrentLargest = 0;
                 }
-                ++newPairing;
             }
-            */
 
 
-            //if (iteration % NODES == 0) {
+
+            if (iterations % NODES == 0) {
 
                 //long start = System.nanoTime();
                 listOfCliques.sort(Comparator.comparingInt(BitSet::cardinality));
@@ -248,7 +246,7 @@ public class Main {
 
                     //for (int node = NODES - 1; node >= lastNode && !found; --node) {
                     for (int repeat = 0; repeat < NODES && !found; ++repeat) {
-                        BitSet candidate = graph.addNode(clique, sortedNodes[node]);
+                        candidate = graph.addNode(clique, sortedNodes[node]);
                         node = (node + PRIME) % NODES;
                         if (candidate != null && !cliques.contains(candidate)) {
                             // System.out.println("Found new clique!");
@@ -277,9 +275,11 @@ public class Main {
                 }
 
                 //System.out.println("Window size: " + window);
-            //}
+                ++iterationsAtCurrentLargest;
+            }
 
-            ++iterationsAtCurrentLargest;
+
+            ++iterations;
         }
 
         //System.out.format("%10s: %d cliques, largest: %d%n", "Final", cliques.size(), largest);
