@@ -35,7 +35,8 @@ public class BruteForce {
         long start = System.nanoTime();
         //int[] nodes = graph.findLargestClique();
         //int[] nodes = graph.findLargestCliqueStack();
-        int[] nodes = graph.findLargestCliqueStackThreaded();
+        //int[] nodes = graph.findLargestCliqueStackThreaded();
+        int[] nodes = graph.newFindLargestCliqueStackThreaded();
         long end = System.nanoTime();
         System.out.format("Clique size: %d %.3f seconds%n", nodes.length, (end - start) / 1000000000.0);
         if (graph.isClique(nodes))

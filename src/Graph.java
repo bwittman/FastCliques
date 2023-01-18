@@ -395,6 +395,135 @@ public class Graph {
     }
 
 
+    public int[] newFindLargestCliqueStackThreaded() throws InterruptedException, ExecutionException {
+        ExecutorService executor = Executors.newWorkStealingPool();
+
+        LongAccumulator largest = new LongAccumulator(Long::max, 0);
+        final int NODES = edges.length;
+        List<Future<BitSet>> futures = new ArrayList<>();
+
+        final int PREBRANCHING  = 10;
+
+        // Go backwards since high-numbered nodes finish faster
+        for (int i = NODES - 1; i >= 0; --i) {
+            final int finalI = i;
+            if (i >= NODES - PREBRANCHING )
+                futures.add(executor.submit(() -> findLargestCliqueStack(finalI, largest)));
+            else
+                futures.add(executor.submit(() -> findLargestCliqueStack(finalI, largest, executor)));
+        }
+
+        int largestCardinality = 0;
+        BitSet largestClique = null;
+
+        for (Future<BitSet> future : futures) {
+            BitSet clique = future.get();
+            int cardinality = clique.cardinality();
+            if (cardinality > largestCardinality) {
+                largestClique = clique;
+                largestCardinality = cardinality;
+            }
+        }
+
+        executor.shutdown();
+        return bitSetToArray(largestClique);
+    }
+
+    private BitSet findLargestCliqueStackWorker(int node, BitSet startingClique, LongAccumulator largest) {
+        final int NODES = edges.length;
+
+        BitSet largestClique = (BitSet) startingClique.clone();
+        int largestCardinality = largestClique.cardinality();
+
+        Deque<CliqueData> stack = new ArrayDeque<>();
+
+        BitSet neighbors = (BitSet) edges[node].clone();
+        BitSet mask = new BitSet(edges.length);
+        mask.flip(0, node + 1); // Only look at neighbors after the current node
+        neighbors.andNot(mask);
+
+        CliqueData startingData = new CliqueData();
+        startingData.clique = startingClique;
+        startingData.cardinality = largestCardinality; // Actually the same as startingClique cardinality
+        startingData.neighbors = neighbors;
+        startingData.nextNeighbor = neighbors.nextSetBit(node + 1);
+        startingData.remainingNeighbors = neighbors.cardinality();
+
+        stack.push(startingData);
+
+        while (!stack.isEmpty()) {
+            CliqueData currentData = stack.peek();
+            if (currentData.nextNeighbor != -1 && currentData.remainingNeighbors + currentData.cardinality > largest.get()) {
+                int neighbor = currentData.nextNeighbor;
+                currentData.nextNeighbor = currentData.neighbors.nextSetBit(neighbor + 1);
+                --currentData.remainingNeighbors;
+                BitSet newClique = addNode(currentData.clique, neighbor);
+                if (newClique != null) {
+
+                    neighbors = (BitSet) edges[neighbor].clone();
+                    mask = new BitSet(edges.length);
+                    mask.flip(0, neighbor + 1);
+                    neighbors.andNot(mask);
+
+                    CliqueData newData = new CliqueData();
+                    newData.clique = newClique;
+                    newData.cardinality = currentData.cardinality + 1;
+                    newData.neighbors = neighbors;
+                    newData.nextNeighbor = neighbors.nextSetBit(neighbor + 1);
+                    newData.remainingNeighbors = neighbors.cardinality();
+
+                    stack.push (newData);
+
+                    if (newData.cardinality > largestCardinality) {
+                        largestClique.clear();
+                        largestClique.or(newClique);
+                        largestCardinality = newData.cardinality;
+                        largest.accumulate(largestCardinality);
+                    }
+                }
+            }
+            else
+                stack.pop();
+        }
+        return largestClique;
+    }
+
+    private BitSet findLargestCliqueStack(int node, LongAccumulator largest, ExecutorService executor) throws ExecutionException, InterruptedException {
+        final int NODES = edges.length;
+        BitSet startingClique = new BitSet(NODES);
+        startingClique.set(node);
+        BitSet largestClique = (BitSet) startingClique.clone();
+        int largestCardinality = largestClique.cardinality();
+
+        BitSet neighbors = (BitSet) edges[node].clone();
+        BitSet mask = new BitSet(edges.length);
+        mask.flip(0, node + 1); // Only look at neighbors after the current node
+        neighbors.andNot(mask);
+
+        List<Future<BitSet>> futures = new ArrayList<>();
+
+        for (int neighbor = neighbors.nextSetBit(node + 1); neighbor != -1; neighbor = neighbors.nextSetBit(neighbor + 1)) {
+            BitSet newClique = addNode(startingClique, neighbor);
+            if (newClique != null) {
+                int finalNeighbor = neighbor;
+                futures.add(executor.submit(() -> findLargestCliqueStackWorker(finalNeighbor, newClique, largest)));
+            }
+        }
+
+        for (Future<BitSet> future : futures) {
+            BitSet clique = future.get();
+            int cardinality = clique.cardinality();
+            if (cardinality > largestCardinality) {
+                largestClique = clique;
+                largestCardinality = cardinality;
+            }
+        }
+
+        System.out.println("[Finished starting at node " + node  + " Best: " + largestCardinality + "]");
+        return largestClique;
+    }
+
+
     private int findLargestClique(int node, BitSet currentClique, BitSet largestClique) {
         int largestCardinality = largestClique.cardinality();
         int currentCardinality = currentClique.cardinality();
