@@ -1,6 +1,5 @@
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAccumulator;
 
 public class Graph {
@@ -402,7 +401,7 @@ public class Graph {
         final int NODES = edges.length;
         List<Future<BitSet>> futures = new ArrayList<>();
 
-        final int PREBRANCHING  = 10;
+        final int PREBRANCHING  = 20;
 
         // Go backwards since high-numbered nodes finish faster
         for (int i = NODES - 1; i >= 0; --i) {

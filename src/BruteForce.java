@@ -6,7 +6,7 @@ import java.util.concurrent.ExecutionException;
 public class BruteForce {
     public static void main(String[] args) throws FileNotFoundException, ExecutionException, InterruptedException {
 
-        Graph graph;
+        GraphWithArrays graph;
         //String graphName = "johnson16-2-4.clq";
         //String graphName = "johnson8-4-4.clq";
         //String graphName = "hamming6-2.clq";
@@ -29,7 +29,7 @@ public class BruteForce {
 
 
         try (Scanner file = new Scanner(new File("data/" + graphName))) {
-            graph = new Graph(file);
+            graph = new GraphWithArrays(file);
         }
 
         long start = System.nanoTime();
