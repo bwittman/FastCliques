@@ -1,5 +1,6 @@
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAccumulator;
 
 public class GraphWithArrays {
@@ -138,6 +139,24 @@ public class GraphWithArrays {
         newClique[node] = true;
         return newClique;
     }
+
+    public boolean makeClique(boolean[] clique, int node) {
+        //if (clique.get(node))
+        //return null;
+
+        boolean[] nodeEdges = edges[node];
+
+        for (int i = 0; i < nodeEdges.length; ++i) {
+            if (clique[i]) {
+                if (!nodeEdges[i])
+                    return false;
+            }
+        }
+
+        clique[node] = true;
+        return true;
+    }
+
 
     public int[] findLargestCliqueStackThreaded() throws InterruptedException, ExecutionException {
         ExecutorService executor = Executors.newWorkStealingPool();
@@ -300,15 +319,139 @@ public class GraphWithArrays {
         return largestClique;
     }
 
+    public int[] findLargestCliqueThreaded() throws ExecutionException, InterruptedException {
+        ExecutorService executor = Executors.newWorkStealingPool();
 
-    private int findLargestClique(int node, boolean[] currentClique, boolean[] largestClique) {
+        LongAccumulator largest = new LongAccumulator(Long::max, 1); // A non-empty graph will always have a size at least 1
         final int NODES = edges.length;
-        int largestCardinality = cardinality(largestClique);
-        int currentCardinality = cardinality(currentClique);
+        List<Future<boolean[]>> futures = new ArrayList<>();
 
-        if (currentCardinality > largestCardinality) {
+        final int PREBRANCHING  = 20;
+
+        // Go backwards since high-numbered nodes finish faster
+        for (int i = NODES - 1; i >= 0; --i) {
+            final int finalI = i;
+            if (i >= NODES - PREBRANCHING )
+                futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest)));
+            else
+                futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest, executor)));
+        }
+
+        int largestCardinality = 0;
+        boolean[] largestClique = null;
+
+        for (Future<boolean[]> future : futures) {
+            boolean[] clique = future.get();
+            int cardinality = cardinality(clique);
+            if (cardinality > largestCardinality) {
+                largestClique = clique;
+                largestCardinality = cardinality;
+            }
+        }
+
+        executor.shutdown();
+        return booleansToArray(largestClique);
+    }
+
+
+    private boolean[] findLargestCliqueThreaded(int node, LongAccumulator largest) {
+        final int NODES = edges.length;
+        boolean[] clique = new boolean[NODES];
+        clique[node] = true;
+        boolean[] largestClique = clique.clone();
+        boolean[] neighbors = edges[node];
+        AtomicInteger largestCardinality = new AtomicInteger(1);
+
+        for (int i = node + 1; i < NODES; ++i) {
+            if (neighbors[i]) {
+                clique[i] = true;
+                findLargestCliqueThreaded(i, clique, 1, largestClique, largestCardinality, largest);
+                clique[i] = false;
+            }
+        }
+
+        System.out.println("[Finished starting at node " + node  + " Best: " + largestCardinality + "]");
+
+        return largestClique;
+    }
+
+    private boolean[] findLargestCliqueThreaded(int node, LongAccumulator largest, ExecutorService executor) throws ExecutionException, InterruptedException {
+        final int NODES = edges.length;
+        boolean[] clique = new boolean[NODES];
+        clique[node] = true;
+
+        boolean[] neighbors = edges[node];
+
+
+        List<Future<boolean[]>> futures = new ArrayList<>();
+        for (int i = node + 1; i < NODES; ++i) {
+            if (neighbors[i]) {
+                boolean[] largestClique = clique.clone();
+                boolean[] currentClique = clique.clone();
+                AtomicInteger largestCardinality = new AtomicInteger(1);
+                currentClique[i] = true;
+                int finalI = i;
+                futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, currentClique, 1, largestClique, largestCardinality, largest)));
+            }
+        }
+
+        int largestCardinality = 0;
+        boolean[] largestClique = null;
+
+        for (Future<boolean[]> future : futures) {
+            clique = future.get();
+            if (clique != null) {
+                int cardinality = cardinality(clique);
+                if (cardinality > largestCardinality) {
+                    largestClique = clique;
+                    largestCardinality = cardinality;
+                }
+            }
+        }
+
+        System.out.println("[Finished starting at node " + node  + " Best: " + largestCardinality + "]");
+        return largestClique;
+    }
+
+    private boolean[]  findLargestCliqueThreaded(int node, boolean[] clique, int cardinality, boolean[] largestClique, AtomicInteger largestCardinality, LongAccumulator largest) {
+        final int NODES = edges.length;
+        boolean[] neighbors = edges[node];
+        for (int j = node - 1; j >= 0; --j) {
+            if (clique[j] && !neighbors[j])
+                return null;
+        }
+
+        ++cardinality; // Yuck
+
+        if (cardinality > largestCardinality.get()) {
+            largestCardinality.set(cardinality);
+            System.arraycopy(clique, 0, largestClique, 0, NODES);
+            largest.accumulate(cardinality);
+        }
+
+        int remainingNeighbors = 0;
+        for (int i = node + 1; i < NODES; ++i)
+            if (neighbors[i])
+                ++remainingNeighbors;
+
+        for (int i = node + 1; i < NODES; ++i) {
+            if (neighbors[i] && remainingNeighbors + cardinality > largest.get()) {
+                clique[i] = true;
+                findLargestCliqueThreaded(i, clique, cardinality, largestClique, largestCardinality, largest);
+                clique[i] = false;
+            }
+        }
+
+        return largestClique;
+    }
+
+    private int findLargestCliqueThreadedWorker(int node, boolean[] currentClique, int currentSize, boolean[] largestClique, int largestSize, LongAccumulator globalLargest) {
+        final int NODES = edges.length;
+
+        if (currentSize > largestSize) {
             System.arraycopy(currentClique, 0, largestClique, 0, NODES);
-            largestCardinality = currentCardinality;
+            globalLargest.accumulate(currentSize);
+            largestSize = currentSize;
         }
 
         // Only look at neighbors with larger indexes than current node
@@ -320,11 +463,12 @@ public class GraphWithArrays {
 
         int remainingNeighbors = cardinality(neighbors, nextNeighbor);
 
-        while (nextNeighbor < NODES && remainingNeighbors + currentCardinality > largestCardinality) {
+        while (remainingNeighbors + currentSize > globalLargest.get()) {
             if (neighbors[nextNeighbor]) {
-                boolean[] newClique = addNode(currentClique, nextNeighbor);
-                if (newClique != null)
-                    largestCardinality = findLargestClique(nextNeighbor, newClique, largestClique);
+                if (makeClique(currentClique, nextNeighbor)) {
+                    largestSize = Math.max(largestSize, findLargestCliqueThreadedWorker(nextNeighbor, currentClique, currentSize + 1, largestClique, largestSize, globalLargest));
+                    currentClique[nextNeighbor] = false;
+                }
 
                 --remainingNeighbors;
             }
@@ -332,7 +476,7 @@ public class GraphWithArrays {
             ++nextNeighbor;
         }
 
-        return largestCardinality;
+        return largestSize;
     }
 
     private boolean[] findLargestCliqueStack(int node, LongAccumulator largest) {
