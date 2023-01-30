@@ -320,37 +320,38 @@ public class GraphWithArrays {
     }
 
     public int[] findLargestCliqueThreaded() throws ExecutionException, InterruptedException {
-        ExecutorService executor = Executors.newWorkStealingPool();
+        try(ExecutorService executor = Executors.newWorkStealingPool()) {
 
-        LongAccumulator largest = new LongAccumulator(Long::max, 1); // A non-empty graph will always have a size at least 1
-        final int NODES = edges.length;
-        List<Future<boolean[]>> futures = new ArrayList<>();
+            LongAccumulator largest = new LongAccumulator(Long::max, 1); // A non-empty graph will always have a size at least 1
+            final int NODES = edges.length;
+            List<Future<boolean[]>> futures = new ArrayList<>();
 
-        final int PREBRANCHING  = 20;
+            final int PREBRANCHING = 40;
 
-        // Go backwards since high-numbered nodes finish faster
-        for (int i = NODES - 1; i >= 0; --i) {
-            final int finalI = i;
-            if (i >= NODES - PREBRANCHING )
-                futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest)));
-            else
-                futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest, executor)));
-        }
-
-        int largestCardinality = 0;
-        boolean[] largestClique = null;
-
-        for (Future<boolean[]> future : futures) {
-            boolean[] clique = future.get();
-            int cardinality = cardinality(clique);
-            if (cardinality > largestCardinality) {
-                largestClique = clique;
-                largestCardinality = cardinality;
+            // Go backwards since high-numbered nodes finish faster
+            for (int i = NODES - 1; i >= 0; --i) {
+                final int finalI = i;
+                if (i >= NODES - PREBRANCHING)
+                    futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest)));
+                else
+                    futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, largest, executor)));
             }
-        }
 
-        executor.shutdown();
-        return booleansToArray(largestClique);
+            int largestCardinality = 0;
+            boolean[] largestClique = null;
+
+            for (Future<boolean[]> future : futures) {
+                boolean[] clique = future.get();
+                int cardinality = cardinality(clique);
+                if (cardinality > largestCardinality) {
+                    largestClique = clique;
+                    largestCardinality = cardinality;
+                }
+            }
+
+
+            return booleansToArray(largestClique);
+        }
     }
 
 
@@ -381,7 +382,6 @@ public class GraphWithArrays {
         clique[node] = true;
 
         boolean[] neighbors = edges[node];
-
 
         List<Future<boolean[]>> futures = new ArrayList<>();
         for (int i = node + 1; i < NODES; ++i) {
@@ -435,10 +435,13 @@ public class GraphWithArrays {
                 ++remainingNeighbors;
 
         for (int i = node + 1; i < NODES; ++i) {
-            if (neighbors[i] && remainingNeighbors + cardinality > largest.get()) {
-                clique[i] = true;
-                findLargestCliqueThreaded(i, clique, cardinality, largestClique, largestCardinality, largest);
-                clique[i] = false;
+            if (neighbors[i] ) {
+                if (remainingNeighbors + cardinality > largest.get()) {
+                    clique[i] = true;
+                    findLargestCliqueThreaded(i, clique, cardinality, largestClique, largestCardinality, largest);
+                    clique[i] = false;
+                }
+                --remainingNeighbors;
             }
         }
 

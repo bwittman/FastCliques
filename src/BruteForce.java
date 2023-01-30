@@ -32,12 +32,15 @@ public class BruteForce {
             graph = new GraphWithArrays(file);
         }
 
+
+
         long start = System.nanoTime();
         //int[] nodes = graph.findLargestClique();
         //int[] nodes = graph.findLargestCliqueStack();
         //int[] nodes = graph.findLargestCliqueStackThreaded();
         //int[] nodes = graph.newFindLargestCliqueStackThreaded();
         int[] nodes = graph.findLargestCliqueThreaded();
+        //int[] nodes = {133, 17, 92, 177, 38, 19, 84, 134, 107, 89, 185, 91, 67, 141, 149, 72, 101, 135, 86, 93, 80};
         long end = System.nanoTime();
         System.out.format("Clique size: %d %.3f seconds%n", nodes.length, (end - start) / 1000000000.0);
         if (graph.isClique(nodes))
