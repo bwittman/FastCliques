@@ -320,7 +320,7 @@ public class GraphWithArrays {
     }
 
     public int[] findLargestCliqueThreaded() throws ExecutionException, InterruptedException {
-        try(ExecutorService executor = Executors.newWorkStealingPool()) {
+        ExecutorService executor = Executors.newWorkStealingPool();
 
             LongAccumulator largest = new LongAccumulator(Long::max, 1); // A non-empty graph will always have a size at least 1
             final int NODES = edges.length;
@@ -349,9 +349,9 @@ public class GraphWithArrays {
                 }
             }
 
-
+        executor.shutdown();
             return booleansToArray(largestClique);
-        }
+
     }
 
 
