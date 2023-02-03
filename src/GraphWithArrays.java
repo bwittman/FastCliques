@@ -361,7 +361,7 @@ public class GraphWithArrays {
         clique[node] = true;
         boolean[] largestClique = clique.clone();
         boolean[] neighbors = edges[node];
-        AtomicInteger largestCardinality = new AtomicInteger(1);
+        int[] largestCardinality = {1};
 
         for (int i = node + 1; i < NODES; ++i) {
             if (neighbors[i]) {
@@ -388,7 +388,7 @@ public class GraphWithArrays {
             if (neighbors[i]) {
                 boolean[] largestClique = clique.clone();
                 boolean[] currentClique = clique.clone();
-                AtomicInteger largestCardinality = new AtomicInteger(1);
+                int[] largestCardinality =  {1};
                 currentClique[i] = true;
                 int finalI = i;
                 futures.add(executor.submit(() -> findLargestCliqueThreaded(finalI, currentClique, 1, largestClique, largestCardinality, largest)));
@@ -413,7 +413,7 @@ public class GraphWithArrays {
         return largestClique;
     }
 
-    private boolean[]  findLargestCliqueThreaded(int node, boolean[] clique, int cardinality, boolean[] largestClique, AtomicInteger largestCardinality, LongAccumulator largest) {
+    private boolean[]  findLargestCliqueThreaded(int node, boolean[] clique, int cardinality, boolean[] largestClique, int[] largestCardinality, LongAccumulator largest) {
         final int NODES = edges.length;
         boolean[] neighbors = edges[node];
         for (int j = node - 1; j >= 0; --j) {
@@ -423,8 +423,8 @@ public class GraphWithArrays {
 
         ++cardinality; // Yuck
 
-        if (cardinality > largestCardinality.get()) {
-            largestCardinality.set(cardinality);
+        if (cardinality > largestCardinality[0]) {
+            largestCardinality[0] = cardinality;
             System.arraycopy(clique, 0, largestClique, 0, NODES);
             largest.accumulate(cardinality);
         }
